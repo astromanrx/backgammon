@@ -1,0 +1,9 @@
+[package]
+name = 'backgammon'
+version = '1.0.0'
+
+[addresses]
+backgammon = "_"
+
+[dependencies]
+AptosFramework = { local = "../../framework/aptos-framework" }
