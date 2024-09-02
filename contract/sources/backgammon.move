@@ -116,9 +116,9 @@ module backgammon::ttt {
         );
 
         if (player_addr == player_x.owner) {
-            place_move(game, x, y, *player_x);
+            place_move(game, tower_index, dice_index, *player_x);
         } else {
-            place_move(game, x, y, *player_o);
+            place_move(game, tower_index, dice_index, *player_o);
         };
 
         if(game.dices[game.active_player].len() == 0)
@@ -258,23 +258,15 @@ module backgammon::ttt {
         // validate player move
         assert!(player_type == game.active_player, error::unauthenticated(EOUT_OF_TURN_MOVE));
 
-        let position = WIDTH_AND_HEIGHT * x + y;
-        let cell = vector::borrow_mut(&mut game.board.vec, position);
+        
+        let tower = vector::borrow_mut(&mut game.board.towers, tower_index);
 
         // validate cell is empty
-        assert!(*cell == EMPTY_CELL, error::invalid_state(EINVALID_MOVE));
-        *cell = player_type;
+        assert!(game.board.towers[tower_index].len()>0 && game.board.towers[tower_index].top().unwrap() == game.active_player , error::invalid_state(EINVALID_MOVE));                                
 
-        // update turn after placing move
-        if (game.active_player == PLAYER_X_TYPE) {
-            game.active_player = PLAYER_O_TYPE;
-        } else {
-            game.active_player = PLAYER_X_TYPE;
-        };
-
-        // check if game won
-        let is_game_over = check_player_win(game);
-        if (is_game_over) game.is_game_over = true;
+        game.board.towers[tower_index].pop()
+        let dice_num = game.board.dices[game.active_player]
+        game.board.towers[tower_index + dice_num].push(game.active_player)
     }	
 
     fun can_bear_off(game: &mut Game) {
