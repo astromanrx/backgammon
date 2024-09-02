@@ -46,11 +46,17 @@ module backgammon::ttt {
         is_game_over: bool,
     }
 
+    #[event]
+    struct EndOfTurnEvent has drop, store {
+        game_address: address
+    }
+
     struct Player has copy, drop, store {
         type: u64,
         owner: address,
     }
 
+    //TODO: simplify the tower to (u8,u8) for player index and num of the player's nuts in the tower
     struct Board has drop, store {
         towers: [Vec<u8>;TOWERS_COUNT],  
 		bar: [Vec<u8>;2],		
@@ -114,6 +120,9 @@ module backgammon::ttt {
         } else {
             place_move(game, x, y, *player_o);
         };
+
+        if(game.dices[game.active_player].len() == 0)
+            event::emit(EndOfTurnEvent { game_address: game_addr, });
     }
 
     /*
