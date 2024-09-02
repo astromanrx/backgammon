@@ -10,7 +10,7 @@ module backgammon::ttt {
 	use aptos_framework::randomness;
 
     //// GAME CONSTANTS    
-
+    const TOWERS_COUNT: u8 = 24
     //// PLAYER CONSTANTS
     const PLAYER_X_TYPE: u8 = 0;
     const PLAYER_O_TYPE: u8 = 1;
@@ -36,6 +36,8 @@ module backgammon::ttt {
     const EGAME_DOESNT_EXIST: u64 = 8;
     /// Out of turn move or player not in game
     const EOUT_OF_TURN_MOVE: u64 = 9;
+    // Has nuts out of home , can't bear off
+    const EBEAR_OFF_ERROR_NUTS_OUT_OF_HOME: u64 = 10;
 
 
     #[event]
@@ -50,14 +52,14 @@ module backgammon::ttt {
     }
 
     struct Board has drop, store {
-        towers: [vector<u8>;24],  
-		bar: [vector<u8>;2],		
+        towers: [Vec<u8>;TOWERS_COUNT],  
+		bar: [Vec<u8>;2],		
     }	
 
     //// to access game records after games are over.
     struct Game has key, store {
         board: Board,
-		dices:[vector<u8>,2]; 
+		dices:[Vec<u8>,2]; 
         player_x: Option<Player>,
         player_o: Option<Player>,
         active_player: u8,
@@ -75,7 +77,7 @@ module backgammon::ttt {
         let game = initalize_game(creator);
         let creator_addr = signer::address_of(creator);
         choose_player_x(&mut game, creator_addr);
-        move_to<Game>(creator, game);
+        move_to<Game>(creator, game);        
     }
 
     /*
@@ -149,13 +151,13 @@ module backgammon::ttt {
 		if(player == PLAYER_X_TYPE)
 			tower_index
 		else
-			24 - tower_index - 1
+			TOWERS_COUNT - tower_index - 1
 		
 	}
 
     fun global_to_player_tower_index(player:u8, tower_index: u8){
 		if(player == PLAYER_X_TYPE)
-			24 - tower_index - 1
+			TOWERS_COUNT - tower_index - 1
 		else
 			tower_index
 		
@@ -172,10 +174,10 @@ module backgammon::ttt {
      * @notice initialize Game struct with base values for a 3x3 game
      */
     fun initalize_game(creator: &signer): Game {		
-        let towers: [Vec<u8>;24];
+        let towers: [Vec<u8>;TOWERS_COUNT];
 		let bar: [Vec<u8>;2];
 		
-		for i in 0..24:
+		for i in 0..TOWERS_COUNT:
 			towers[i] = Vec::empty<u64>()		
 		
 		bars = [Vec::empty<u64>(),Vec::empty<u64>()];
@@ -265,14 +267,41 @@ module backgammon::ttt {
         let is_game_over = check_player_win(game);
         if (is_game_over) game.is_game_over = true;
     }	
+
+    fun can_bear_off(game: &mut Game) {
+        if (game.board.bar[game.active_player].len() > 0)
+            return false
+        for player_tower_index in 0..18{
+            let global_tower_index = global_to_player_tower_index(player_tower_index)
+            if(game.board.towers[global_tower_index].len() > 0 && game.board.towers[global_tower_index][0] == game.active_player)
+        }
+        true                    
+    }
     
+    fun dice_is_valid(game: &mut Game,dice_index:u8){        
+        if (dice_index < 0)
+            return false
+        if (dice_index > game.dices[game.active_player].len() - 1)
+            return false
+        true
+    }
+
+    fun tower_index_is_valid(tower_index: u8){
+        tower_index >= 0 && tower_index < TOWERS_COUNT
+    }
+
     /*
 	* player can bear off the 
 	*/
-	fun bear_off(game: &mut Game,dice_index:u8) {
-		for i in 0..game.board.len() {
-			
-		}
+	fun bear_off(game: &mut Game,player_tower_index: u8,dice_index:u8) {
+        assert!(can_bear_off(game), error::invalid_argument(EBEAR_OFF_ERROR_NUTS_OUT_OF_HOME))
+        assert!(dice_is_valid() ,error::invalid_argument(EINVALID_DICE_INDEX))        
+        assert!(tower_index_is_valid() ,error::invalid_argument(EINVALID_TOWER_INDEX))
+        let dice_num = game.dices[game.active_player][dice_index]    
+        assert!(dice_num + player_tower_index < TOWERS_COUNT ,error::invalid_argument(EINVALID_DICE_NUM))
+        let global_tower_index = global_to_player_tower_index(player_tower_index)
+        assert!(game.board.towers[global_tower_index].len() > 0 && game.board.towers[global_tower_index].top().unwrap() == game.active_player ,error::invalid_argument(EINVALID_TOWER_PLAYER))
+		game.board.towers[global_tower_index].pop()
 	}
 
     /*
@@ -306,11 +335,8 @@ module backgammon::ttt {
             player_o,
             active_player: _,
             is_game_over: _,
-        } = game;
-        option::destroy_some(player_x);
-        option::destroy_some(player_o);
-        // while (!vector::is_empty(&vec)) {
-        //     vector::pop_back(&mut vec);
-        // };
+        } = game
+        option::destroy_some(player_x)
+        option::destroy_some(player_o)        
     }   
 }
