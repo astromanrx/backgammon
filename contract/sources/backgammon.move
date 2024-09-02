@@ -60,7 +60,7 @@ module backgammon::ttt {
 		dices:[vector<u8>,2]; 
         player_x: Option<Player>,
         player_o: Option<Player>,
-        is_player_x_turn: bool,
+        active_player: u8,
         is_game_over: bool,
     }
 
@@ -153,9 +153,18 @@ module backgammon::ttt {
 		
 	}
 
-	fun push_nut(game: &mut Game,player: u8,player_tower_index:u8){
+    fun global_to_player_tower_index(player:u8, tower_index: u8){
+		if(player == PLAYER_X_TYPE)
+			24 - tower_index - 1
+		else
+			tower_index
+		
+	}
+
+	fun push_nut(game: &mut Game,player: u8,player_tower_index:u8 , count: u8 = 1){
 		let global_tower_index = player_to_global_tower_index(player,tower_index)
-		game.board.towers[global_tower_index].push(player);		
+        for i in 0..count:
+		    game.board.towers[global_tower_index].push(player);		
 	}
 		
 
@@ -178,18 +187,16 @@ module backgammon::ttt {
             },
             player_x: option::none(),
             player_o: option::none(),
-            is_player_x_turn: true,
+            active_player: PLAYER_X_TYPE,
             is_game_over: false,
         }
 		
-		for i in 0..2
-			push_nut(game,PLAYER_X_TYPE,0)
-		for i in 0..5
-			push_nut(game,PLAYER_X_TYPE,11)
-		for i in 0..3
-			push_nut(game,PLAYER_X_TYPE,16)
-		for i in 0..5
-			push_nut(game,PLAYER_X_TYPE,18)
+		for player in PLAYER_X_TYPE..PLAYER_O_TYPE{            
+            push_nut(game,player,0,2)            
+            push_nut(game,player,11,5)            
+            push_nut(game,player,16,3)            
+            push_nut(game,player,18,5)
+        }
 			
 		game
     }
@@ -238,12 +245,7 @@ module backgammon::ttt {
         assert!(!game.is_game_over, error::invalid_argument(EGAME_HAS_ALREADY_FINISHED));
 
         // validate player move
-        let player_type = player.type;
-        if (game.is_player_x_turn) {
-            assert!(player_type == PLAYER_X_TYPE, error::unauthenticated(EOUT_OF_TURN_MOVE));
-        } else {
-            assert!(player_type == PLAYER_O_TYPE, error::unauthenticated(EOUT_OF_TURN_MOVE));
-        };
+        assert!(player_type == game.active_player, error::unauthenticated(EOUT_OF_TURN_MOVE));
 
         let position = WIDTH_AND_HEIGHT * x + y;
         let cell = vector::borrow_mut(&mut game.board.vec, position);
@@ -253,18 +255,18 @@ module backgammon::ttt {
         *cell = player_type;
 
         // update turn after placing move
-        if (game.is_player_x_turn) {
-            game.is_player_x_turn = false;
+        if (game.active_player == PLAYER_X_TYPE) {
+            game.active_player = PLAYER_O_TYPE;
         } else {
-            game.is_player_x_turn = true;
+            game.active_player = PLAYER_X_TYPE;
         };
 
         // check if game won
         let is_game_over = check_player_win(game);
         if (is_game_over) game.is_game_over = true;
-    }
-	
-	/*
+    }	
+    
+    /*
 	* player can bear off the 
 	*/
 	fun bear_off(game: &mut Game,dice_index:u8) {
@@ -276,17 +278,9 @@ module backgammon::ttt {
     /*
      * @notice player who has no nut in the board, and on the bar , wins the game
      */
-    fun check_player_win(game: &mut Game): bool {
-		let active_player: u8;
-		
-		if (game.is_player_x_turn) {
-            active_player = PLAYER_X_TYPE;
-        } else {
-            active_player = PLAYER_O_TYPE;
-        };
-			
+    fun check_player_win(game: &mut Game): bool {					
         for tower_index in 0..game.board.len() {
-			if (game.board.bar[active_player].len() == 0 && game.board.towers[tower_index].len()>0 && game.board.towers[tower_index][0] == active_player)
+			if (game.board.bar[game.active_player].len() == 0 && game.board.towers[tower_index].len()>0 && game.board.towers[tower_index][0] == game.active_player)
 				return false
 		}
 		true		
@@ -310,13 +304,13 @@ module backgammon::ttt {
             },
             player_x,
             player_o,
-            is_player_x_turn: _,
+            active_player: _,
             is_game_over: _,
         } = game;
         option::destroy_some(player_x);
         option::destroy_some(player_o);
-        while (!vector::is_empty(&vec)) {
-            vector::pop_back(&mut vec);
-        };
+        // while (!vector::is_empty(&vec)) {
+        //     vector::pop_back(&mut vec);
+        // };
     }   
 }
