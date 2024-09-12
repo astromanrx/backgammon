@@ -12,8 +12,8 @@ module backgammon::backgammon {
     //// GAME CONSTANTS    
     const TOWERS_COUNT: u8 = 24;
     //// PLAYER CONSTANTS
-    const PLAYER_X_TYPE: u8 = 0;
-    const PLAYER_O_TYPE: u8 = 1;
+    const PLAYER_HOST: u8 = 0;
+    const PLAYER_GUEST: u8 = 1;
 
     //// ERROR CODES
     /// Placing a move on a (x,y) position that is already occupied
@@ -38,10 +38,15 @@ module backgammon::backgammon {
     const EOUT_OF_TURN_MOVE: u64 = 9;
     // Has nuts out of home , can't bear off
     const EBEAR_OFF_ERROR_NUTS_OUT_OF_HOME: u64 = 10;
+    // Dice index is invalid
     const EINVALID_DICE_INDEX: u64 = 11;
+    // Tower index is invalid
     const EINVALID_TOWER_INDEX: u64 = 12;
+    // Dice number is invalid
     const EINVALID_DICE_NUM: u64 = 13;
+    // Player trying to change other player's tower
     const EINVALID_TOWER_PLAYER: u64 = 14;
+    // It's not your turn
     const EPLAYER_NOT_YOUR_TURN: u64 = 15;
 
 
@@ -68,8 +73,8 @@ module backgammon::backgammon {
     }
 
     struct Bar has drop,store{
-        player_x_nuts: u8,
-        player_o_nuts: u8
+        host_nuts: u8,
+        guest_nuts: u8
     }
 
     //TODO: simplify the tower to (u8,u8) for player index and num of the player's nuts in the tower
@@ -81,10 +86,10 @@ module backgammon::backgammon {
     //// to access game records after games are over.
     struct Game has key, store {
         board: Board,
-		player_x_dices:vector<u8>,
-        player_o_dices:vector<u8>,
-        player_x: Option<Player>,
-        player_o: Option<Player>,
+		host_dices:vector<u8>,
+        guest_dices:vector<u8>,
+        host_player: Option<Player>,
+        guest_player: Option<Player>,
         active_player: u8,
         is_game_over: bool,
     }
@@ -94,25 +99,26 @@ module backgammon::backgammon {
      * @dev stores the Game into global storage
      */
     //// TODO: have Game as its own object, with its own address
-    public entry fun start_game(creator: &signer) {
+    public entry fun create_game(creator: &signer) {
         // check game doesn't already exist under creator address
         assert!(!exists<Game>(signer::address_of(creator)), error::already_exists(EGAME_ALREADY_EXISTS_FOR_USER));
-        let game = initalize_game(creator);
+        let game = initalize_game();
         let creator_addr = signer::address_of(creator);
-        choose_player_x(&mut game, creator_addr);
-        move_to<Game>(creator, game);        
+        choose_host_player(&mut game, creator_addr);
+        move_to<Game>(creator, game);                
     }
 
     /*
      * @notice lets another user join given a valid game address
      */
-    public entry fun join_as_player_o(new_user: &signer, game_addr: address) acquires Game {
+    public entry fun join_game(new_user: &signer, game_addr: address) acquires Game {
+        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
+
         let new_user_addr = signer::address_of(new_user);
         assert!(new_user_addr != game_addr, error::invalid_argument(ECANNOT_JOIN_AS_TWO_PLAYERS));
-
-        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
+        
         let game = borrow_global_mut(game_addr);
-        choose_player_o(game, new_user_addr);
+        choose_guest_player(game, new_user_addr);
     }
 
     /*
@@ -120,32 +126,28 @@ module backgammon::backgammon {
      * @dev checks to ensure a player can make a valid move
      */
     public entry fun choose_move(player: &signer, game_addr: address, tower_index: u8, dice_index: u8) acquires Game {        
-        let game: &mut Game = borrow_global_mut(game_addr);
-        let player_x = option::borrow(&game.player_x);
-        let player_o = option::borrow(&game.player_o);
-
+        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
+        let game: &mut Game = borrow_global_mut(game_addr);        
+        let host_player = option::borrow(&game.host_player);
+        let guest_player = option::borrow(&game.guest_player);                    
         let player_addr = signer::address_of(player);
-        assert!(
-            player_addr != player_x.owner || player_addr != player_o.owner,
-            error::permission_denied(EPLAYER_NOT_IN_GAME),
-        );
         
-        assert!(game.active_player == PLAYER_O_TYPE && player_addr != game.player_o , error::permission_denied(EPLAYER_NOT_YOUR_TURN));
-        assert!(game.active_player == PLAYER_X_TYPE && player_addr != game.player_x , error::permission_denied(EPLAYER_NOT_YOUR_TURN));
+        assert!(
+            player_addr != host_player.owner || player_addr != guest_player.owner,
+            error::permission_denied(EPLAYER_NOT_IN_GAME),
+        );        
+        
+        assert!(game.active_player == PLAYER_GUEST && (player_addr != guest_player.owner) , error::permission_denied(EPLAYER_NOT_YOUR_TURN));
+        assert!(game.active_player == PLAYER_HOST && (player_addr != host_player.owner) , error::permission_denied(EPLAYER_NOT_YOUR_TURN));
 
-
-        if (player_addr == player_x.owner) {
-            place_move(game, tower_index, dice_index, *player_x);
-        } else {
-            place_move(game, tower_index, dice_index, *player_o);
-        };        
+        place_move(game, tower_index, dice_index);        
 
         let dices: &mut vector<u8>;
 
-        if(game.active_player == PLAYER_X_TYPE){
-            dices = &mut game.player_x_dices;
+        if(game.active_player == PLAYER_HOST){
+            dices = &mut game.host_dices;
         }else{
-            dices = &mut game.player_o_dices;
+            dices = &mut game.guest_dices;
         };
 
         vector::remove(dices,dice_index as u64); 
@@ -157,9 +159,18 @@ module backgammon::backgammon {
     }
 
     #[view]
-    public entry fun get_dices(player_addr: address, game_addr: address) acquires vector<u8> {    
+    public fun get_dices(player_addr: address, game_addr: address) : vector<u8> acquires Game{          
+        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
+  
         let game: &Game = borrow_global(game_addr);
-        if(plater_addr)
+        let host_player = option::borrow(&game.host_player);
+        let guest_player = option::borrow(&game.guest_player);
+        assert!(host_player.owner == player_addr || guest_player.owner == player_addr , error::permission_denied(EPLAYER_NOT_YOUR_TURN));
+        if(host_player.owner == player_addr){
+            return game.host_dices
+        }else{
+            return game.guest_dices
+        }
     }   
 
     /*
@@ -176,13 +187,15 @@ module backgammon::backgammon {
      * @notice voluntarily give up, the other player wins
      */
     public entry fun forfeit(player: &signer, game_addr: address) acquires Game {
+        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
+
         let player_addr = signer::address_of(player);
         let game: &mut Game = borrow_global_mut(game_addr);
-        let player_x = option::borrow_mut(&mut game.player_x);
-        let player_o = option::borrow_mut(&mut game.player_o);
+        let host_player = option::borrow_mut(&mut game.host_player);
+        let guest_player = option::borrow_mut(&mut game.guest_player);
 
         assert!(
-            player_addr != player_x.owner || player_addr != player_o.owner,
+            player_addr != host_player.owner || player_addr != guest_player.owner,
             error::permission_denied(EPLAYER_NOT_IN_GAME)
         );
 		
@@ -194,7 +207,7 @@ module backgammon::backgammon {
     }
 	
 	fun player_to_global_tower_index(player:u8, tower_index: u8): u8{
-		if(player == PLAYER_X_TYPE)
+		if(player == PLAYER_HOST)
 			tower_index
 		else
 			TOWERS_COUNT - tower_index - 1
@@ -202,7 +215,7 @@ module backgammon::backgammon {
 	}
 
     fun global_to_player_tower_index(player:u8, tower_index: u8): u8{
-		if(player == PLAYER_X_TYPE)
+		if(player == PLAYER_HOST)
 			TOWERS_COUNT - tower_index - 1
 		else
 			tower_index
@@ -218,9 +231,9 @@ module backgammon::backgammon {
 		
 
     /*
-     * @notice initialize Game struct with base values for a 3x3 game
+     * @notice initialize Game struct with base values 
      */
-    fun initalize_game(creator: &signer): Game {		
+    fun initalize_game(): Game {		
         let towers: vector<Tower> = vector::empty();
 		let bar: Bar;
 		
@@ -233,8 +246,8 @@ module backgammon::backgammon {
 			
 		
 		bar = Bar{
-            player_x_nuts: 0,
-            player_o_nuts: 0,
+            host_nuts: 0,
+            guest_nuts: 0,
         };
         
         let game = Game {
@@ -242,18 +255,18 @@ module backgammon::backgammon {
                 towers: towers,                
 				bar: bar
             },
-            player_x: option::none(),
-            player_o: option::none(),
+            host_player: option::none(),
+            guest_player: option::none(),
             
-            player_x_dices: vector::empty(),
-            player_o_dices: vector::empty(),
+            host_dices: vector::empty(),
+            guest_dices: vector::empty(),
             
-            active_player: PLAYER_X_TYPE,
+            active_player: PLAYER_HOST,
             is_game_over: false,
 
         };
 		
-		for(player in PLAYER_X_TYPE..PLAYER_O_TYPE){            
+		for(player in PLAYER_HOST..PLAYER_GUEST){            
             push_nut(&mut game,player,0,2);
             push_nut(&mut game,player,11,5);            
             push_nut(&mut game,player,16,3);            
@@ -264,41 +277,48 @@ module backgammon::backgammon {
     }
 	
 	#[randomness(max_gas=56789)]
-    entry fun roll_the_dice(player: signer) acquires Game  {
-        let roll = randomness::u8_range(0, 6);
-		
-		let player_addr = signer::address_of(&player);
-        let game: &mut Game = borrow_global_mut(player_addr);
+    entry fun roll_the_dice(player: signer,game_addr: address) acquires Game  {
+        assert!(exists<Game>(game_addr), error::not_found(EGAME_DOESNT_EXIST));
 
-        if(game.active_player == PLAYER_X_TYPE){
-            vector::push_back(&mut game.player_x_dices,roll);            
+        let game: &mut Game = borrow_global_mut(game_addr);
+
+		let player_addr = signer::address_of(&player);
+        let host_player = option::borrow_mut(&mut game.host_player);
+        let guest_player = option::borrow_mut(&mut game.guest_player);
+        assert!(game.active_player == PLAYER_HOST && host_player.owner == player_addr, error::not_found(EPLAYER_NOT_YOUR_TURN));
+        assert!(game.active_player == PLAYER_GUEST && guest_player.owner == player_addr, error::not_found(EPLAYER_NOT_YOUR_TURN));
+
+        let roll = randomness::u8_range(0, 6);	        
+
+        if(game.active_player == PLAYER_HOST){
+            vector::push_back(&mut game.host_dices,roll);            
         }else{
-            vector::push_back(&mut game.player_o_dices,roll);
+            vector::push_back(&mut game.guest_dices,roll);
         }        
     }
 
     /*
-     * @notice user who initiates game is automatically player_x
+     * @notice user who initiates game is automatically host_player
      */
-    fun choose_player_x(game: &mut Game, user: address) {
+    fun choose_host_player(game: &mut Game, user: address) {
         assert!(!game.is_game_over, error::invalid_argument(EGAME_HAS_ALREADY_FINISHED));
-        assert!(option::is_none(&game.player_x), error::already_exists(EPLAYER_TAKEN));
+        assert!(option::is_none(&game.host_player), error::already_exists(EPLAYER_TAKEN));
 
-        game.player_x = option::some(Player {
-            type: PLAYER_X_TYPE,
+        game.host_player = option::some(Player {
+            type: PLAYER_HOST,
             owner: user,
         });
     }
 
     /*
-     * @notice another user whose not the creator may join as player_o
+     * @notice another user whose not the creator may join as guest_player
      */
-    fun choose_player_o(game: &mut Game, user: address) {
+    fun choose_guest_player(game: &mut Game, user: address) {
         assert!(!game.is_game_over, error::invalid_argument(EGAME_HAS_ALREADY_FINISHED));
-        assert!(option::is_none(&game.player_o), error::already_exists(EPLAYER_TAKEN));
+        assert!(option::is_none(&game.guest_player), error::already_exists(EPLAYER_TAKEN));
 
-        game.player_o = option::some(Player {
-            type: PLAYER_O_TYPE,
+        game.guest_player = option::some(Player {
+            type: PLAYER_GUEST,
             owner: user,
         });
     }
@@ -306,7 +326,7 @@ module backgammon::backgammon {
     /*
      * @notice place (x,y) move on a 3x3 board
      */
-    fun place_move(game: &mut Game, tower_index: u8, dice_index: u8, player: Player) {
+    fun place_move(game: &mut Game, tower_index: u8, dice_index: u8) {
         // validate game state
         assert!(!game.is_game_over, error::invalid_argument(EGAME_HAS_ALREADY_FINISHED));
 
@@ -321,10 +341,10 @@ module backgammon::backgammon {
 
         tower.nuts = tower.nuts - 1;
         let dices: &vector<u8>;
-        if(game.active_player == PLAYER_X_TYPE){
-            dices = &game.player_x_dices;
+        if(game.active_player == PLAYER_HOST){
+            dices = &game.host_dices;
         }else{
-            dices = &game.player_o_dices;
+            dices = &game.guest_dices;
         };
 
         let dice_num = *vector::borrow(dices,dice_index as u64);
@@ -343,10 +363,10 @@ module backgammon::backgammon {
     fun can_bear_off(game: &mut Game): bool {
         let bar = &game.board.bar;
         let bar_nuts: u8;
-        if(game.active_player == PLAYER_O_TYPE){
-            bar_nuts = bar.player_o_nuts;
+        if(game.active_player == PLAYER_GUEST){
+            bar_nuts = bar.guest_nuts;
         }else{
-            bar_nuts = bar.player_x_nuts;
+            bar_nuts = bar.host_nuts;
         };
         
         if (bar_nuts > 0){
@@ -360,7 +380,7 @@ module backgammon::backgammon {
             let global_tower_index = global_to_player_tower_index(game.active_player,player_tower_index as u8);
             let tower = vector::borrow(towers,global_tower_index as u64);
             if(tower.owner == game.active_player && tower.nuts>0){
-                return false;
+                return false
             }            
         };
         true                    
@@ -370,10 +390,10 @@ module backgammon::backgammon {
         if (dice_index < 0){
             return false
         };            
-        if(game.active_player == PLAYER_O_TYPE && !((dice_index as u64) < vector::length(&game.player_o_dices))){
+        if(game.active_player == PLAYER_GUEST && !((dice_index as u64) < vector::length(&game.guest_dices))){
             return false
         };
-        if(game.active_player == PLAYER_X_TYPE && !((dice_index  as u64) < vector::length(&game.player_x_dices))){
+        if(game.active_player == PLAYER_HOST && !((dice_index  as u64) < vector::length(&game.host_dices))){
             return false
         };                  
         true
@@ -386,16 +406,17 @@ module backgammon::backgammon {
     /*
 	* player can bear off the 
 	*/
-	fun bear_off(game: &mut Game,player_tower_index: u8,dice_index:u8) {
+	public entry fun bear_off(game_addr: address, player_tower_index: u8,dice_index:u8) acquires Game {
+        let game = borrow_global_mut(game_addr); 
         assert!(can_bear_off(game), error::invalid_argument(EBEAR_OFF_ERROR_NUTS_OUT_OF_HOME));
         assert!(dice_is_valid(game,dice_index) ,error::invalid_argument(EINVALID_DICE_INDEX));
         assert!(tower_index_is_valid(player_tower_index) ,error::invalid_argument(EINVALID_TOWER_INDEX));
         
         let dices: &vector<u8>;
-        if(game.active_player == PLAYER_X_TYPE){
-            dices = &game.player_x_dices;
+        if(game.active_player == PLAYER_HOST){
+            dices = &game.host_dices;
         }else{
-            dices = &game.player_o_dices;
+            dices = &game.guest_dices;
         };
 
         let dice_num = *vector::borrow(dices,dice_index as u64);
@@ -413,12 +434,12 @@ module backgammon::backgammon {
      * @notice player who has no nut in the board, and on the bar , wins the game
      */
     fun check_player_win(game: &mut Game): bool {					
-        if(game.active_player == PLAYER_X_TYPE){
-            if(game.board.bar.player_x_nuts > 0){
+        if(game.active_player == PLAYER_HOST){
+            if(game.board.bar.host_nuts > 0){
                 return false
             };
         }else{
-            if(game.board.bar.player_o_nuts > 0){
+            if(game.board.bar.guest_nuts > 0){
                 return false
             };
         };
@@ -449,12 +470,12 @@ module backgammon::backgammon {
         //         towers,
         //         bar
         //     },
-        //     player_x,
-        //     player_o,
+        //     host_player,
+        //     guest_player,
         //     active_player: _,
         //     is_game_over: _,
         // } = game;
-        // option::destroy_some(player_x);
-        // option::destroy_some(player_o);        
+        // option::destroy_some(host_player);
+        // option::destroy_some(guest_player);        
     // }   
 }
