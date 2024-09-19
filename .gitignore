@@ -1,5 +1,7 @@
 #VSCode ide folder
 .vscode/
+#Rustover ide folder
+.idea/
 #aptos generated folders
 .aptos/
 build/
