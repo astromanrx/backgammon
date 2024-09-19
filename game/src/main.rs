@@ -6,16 +6,26 @@ use bevy::{prelude::*, render::camera::ScalingMode, sprite::Anchor, window::{Pre
 
 #[path = "./utils.rs"]
 mod utils;
+
+#[path = "./gdk.rs"]
+mod gdk;
+
+use gdk::GDK;
 use utils::{global_to_player_tower_index, player_to_global_tower_index, Board, PLAYER_GUEST, PLAYER_HOST, TOWERS_COUNT,initialize};
 
 const BAR_WIDTH : f32 = 100.;
 
-fn main() {    
+
+#[tokio::main]
+async fn main() {    
+    let gdk = GDK::new();
+    gdk.start_game().await;
+
     App::new()
     .add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "Aptos Backgammon".into(),
-            name: Some("backgammon.app".into()),
+            // name: Some("backgammon.app".into()),
             // mode: WindowMode::BorderlessFullscreen,
             resolution: (1280., 720.).into(),
             present_mode: PresentMode::AutoVsync,
@@ -38,6 +48,8 @@ fn main() {
     }),)
     .add_systems(Startup, setup)
     .run();    
+
+    
 }
 
 fn draw_points(commands:&mut Commands,wooden_stack_texture: Handle<Image>,white_stack_texture: Handle<Image>){
@@ -186,5 +198,5 @@ fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
     let board = initialize();    
 
     draw_points(commands.borrow_mut(), wooden_stack_texture, white_stack_texture);
-    draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);
+    draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);    
 }

@@ -13,8 +13,8 @@ pub struct Tower {
 }
 
 pub struct Bar {
-    host_nuts: u8,
-    guest_nuts: u8
+    pub host_nuts: u8,
+    pub guest_nuts: u8
 }
 
 //TODO: simplify the tower to (u8,u8) for player index and num of the player's nuts in the tower
