@@ -1,6 +1,7 @@
 use std::{str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 
 use aptos_sdk::{bcs, coin_client::CoinClient, rest_client::{Client, FaucetClient}, types::{account_config::chain_id, transaction::{RawTransaction, SignedTransaction}, LocalAccount}};
+use bevy::utils::tracing::instrument::WithSubscriber;
 use once_cell::sync::Lazy;
 use url::Url;
 use tokio;
@@ -16,6 +17,8 @@ use aptos_sdk::types::account_address::AccountAddress;
 use aptos_sdk::types::chain_id::ChainId;
 use aptos_sdk::types::transaction::{EntryFunction, TransactionPayload};
 use rand::rngs::OsRng;
+
+use std::time::{ Instant, Duration };
 
 
 
@@ -105,9 +108,7 @@ impl GDK {
             .context("Failed to fund player's account");
     }
 
-    pub async fn start_game(&self){
-
-        let _ = self.fund().await;
+    pub async fn start_game(&self){        
         println!("{}",self.player_account.address());
         // let chain_id = self.rest_client.get_index()
         //     .await
@@ -116,7 +117,7 @@ impl GDK {
         //     .chain_id;
         // println!("chain id: {}",chain_id);
 
-        let function_id:Identifier = ident_str!("start_game").to_owned();
+        let function_id:Identifier = ident_str!("create_game").to_owned();
         let type_tags: Vec<TypeTag> = vec![];
         let args : Vec<Vec<u8>> = vec![];
         let entry_function = EntryFunction::new(self.module_id.clone(),function_id,type_tags,args);
@@ -134,14 +135,15 @@ impl GDK {
             );
         let raw_transaction = builder.build();
         let signed_transaction = self.player_account.sign_transaction(raw_transaction);
-        let simulated_result = self.rest_client.simulate_bcs(&signed_transaction).await;
-        match simulated_result {
-            Err(error) => println!("Failed in simulation {}",error),
-            _ => println!("{}","Simulation succeeded.")
-        }
+        // let simulated_result = self.rest_client.simulate_bcs(&signed_transaction).await;
+        // match simulated_result {
+        //     Err(error) => println!("Failed in simulation {}",error),
+        //     _ => println!("{}","Simulation succeeded.")
+        // }
         let result = self.rest_client.submit_and_wait(&signed_transaction)
-            .await;
-            
+            .await;        
+        
+        self.rest_client.get_account_events(address, struct_tag, field_name, start, limit);
         match result {
             Err(error) => println!("{}",error),
             Ok(response) => println!("{}","Game started.")
