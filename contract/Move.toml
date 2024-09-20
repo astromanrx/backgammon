@@ -5,6 +5,9 @@ version = '1.0.0'
 [addresses]
 backgammon = "_"
 
+[dev-addresses]
+backgammon= "0x35bcaf14a08f75b726ff25dbad2063286a4b3ff191753b0f1d57913b2038a687"
+
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
 rev = "mainnet"

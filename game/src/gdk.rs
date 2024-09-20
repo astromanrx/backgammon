@@ -1,6 +1,6 @@
 use std::{str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 
-use aptos_sdk::{bcs, coin_client::CoinClient, rest_client::{Client, FaucetClient}, types::{transaction::{RawTransaction, SignedTransaction}, LocalAccount}};
+use aptos_sdk::{bcs, coin_client::CoinClient, rest_client::{Client, FaucetClient}, types::{account_config::chain_id, transaction::{RawTransaction, SignedTransaction}, LocalAccount}};
 use once_cell::sync::Lazy;
 use url::Url;
 use tokio;
@@ -51,20 +51,19 @@ pub struct GDK{
 impl GDK {
     pub fn new() -> GDK{
         let rest_client = Client::new(NODE_URL.clone());
-        let faucet_client = FaucetClient::new(FAUCET_URL.clone(), NODE_URL.clone());
-        // let coin_client = CoinClient::new(&rest_client);
+        let faucet_client = FaucetClient::new(FAUCET_URL.clone(), NODE_URL.clone());        
+        let coin_client = CoinClient::new(&rest_client);
         
         // let mut alice = LocalAccount::generate(&mut OsRng);
         // let bob = LocalAccount::generate(&mut OsRng);
         let player_account = LocalAccount::generate(&mut OsRng);
         let transaction_factory = TransactionFactory::new(ChainId::new(149));
+        let contract_account: AccountAddress = AccountAddress::from_hex_literal("0x35bcaf14a08f75b726ff25dbad2063286a4b3ff191753b0f1d57913b2038a687").unwrap();
         let module_id = ModuleId::new(
-            AccountAddress::new([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1,
-            ]),
-            ident_str!("backgammon::backgammon").to_owned()
-        );
+            contract_account,
+            ident_str!("backgammon").to_owned()
+        );        
+
         return GDK {
             rest_client,
             faucet_client,
@@ -107,6 +106,16 @@ impl GDK {
     }
 
     pub async fn start_game(&self){
+
+        let _ = self.fund().await;
+        println!("{}",self.player_account.address());
+        // let chain_id = self.rest_client.get_index()
+        //     .await
+        //     .context("Failed to get chain ID")?
+        //     .inner()
+        //     .chain_id;
+        // println!("chain id: {}",chain_id);
+
         let function_id:Identifier = ident_str!("start_game").to_owned();
         let type_tags: Vec<TypeTag> = vec![];
         let args : Vec<Vec<u8>> = vec![];
@@ -125,6 +134,11 @@ impl GDK {
             );
         let raw_transaction = builder.build();
         let signed_transaction = self.player_account.sign_transaction(raw_transaction);
+        let simulated_result = self.rest_client.simulate_bcs(&signed_transaction).await;
+        match simulated_result {
+            Err(error) => println!("Failed in simulation {}",error),
+            _ => println!("{}","Simulation succeeded.")
+        }
         let result = self.rest_client.submit_and_wait(&signed_transaction)
             .await;
             
