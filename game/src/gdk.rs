@@ -20,8 +20,6 @@ use rand::rngs::OsRng;
 
 use std::time::{ Instant, Duration };
 
-
-
 static NODE_URL: Lazy<Url> = Lazy::new(|| {
     Url::from_str(
         std::env::var("APTOS_NODE_URL")
@@ -142,8 +140,7 @@ impl GDK {
         // }
         let result = self.rest_client.submit_and_wait(&signed_transaction)
             .await;        
-        
-        self.rest_client.get_account_events(address, struct_tag, field_name, start, limit);
+                
         match result {
             Err(error) => println!("{}",error),
             Ok(response) => println!("{}","Game started.")
@@ -183,7 +180,7 @@ impl GDK {
             Ok(response) => {
                 println!("{}","Joined game.");
             }
-        }
+        }        
     }
     
 }

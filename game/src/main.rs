@@ -15,42 +15,9 @@ use utils::{global_to_player_tower_index, player_to_global_tower_index, Board, P
 
 const BAR_WIDTH : f32 = 100.;
 
-
-#[tokio::main]
-async fn main() {    
-    let gdk = GDK::new();
-    gdk.start_game().await;
-
-    App::new()
-    .add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Aptos Backgammon".into(),
-            // name: Some("backgammon.app".into()),
-            // mode: WindowMode::BorderlessFullscreen,
-            resolution: (1280., 720.).into(),
-            present_mode: PresentMode::AutoVsync,
-            // Tells Wasm to resize the window according to the available canvas
-            fit_canvas_to_parent: true,
-            // Tells Wasm not to override default event handling, like F5, Ctrl+R etc.
-            prevent_default_event_handling: false,
-            window_theme: Some(WindowTheme::Dark),
-            enabled_buttons: bevy::window::EnabledButtons {
-                maximize: false,
-                ..Default::default()
-            },
-            // This will spawn an invisible window
-            // The window will be made visible in the make_visible() system after 3 frames.
-            // This is useful when you want to avoid the white window that shows up before the GPU is ready to render the app.
-            visible: true,
-            ..default()
-        }),
-        ..default()
-    }),)
-    .add_systems(Startup, setup)
-    .run();    
-
-    
-}
+const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
+const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
 
 fn draw_points(commands:&mut Commands,wooden_stack_texture: Handle<Image>,white_stack_texture: Handle<Image>){
     //Render top    
@@ -183,11 +150,70 @@ fn draw_nuts(commands: &mut Commands,wooden_nut_texture: Handle<Image>,white_nut
         
 }
 
+fn create_button(parent:&mut ChildBuilder,id: &str,caption: &str,font: Handle<Font>){        
+    let button_style = Style {
+        width: Val::Px(150.0),
+        height: Val::Px(65.0),
+        border: UiRect::all(Val::Px(5.0)),
+        // horizontally center child text
+        justify_content: JustifyContent::Center,
+        // vertically center child text
+        align_items: AlignItems::Center,
+        ..default()
+    };
+
+    let button_text = TextBundle::from_section(
+        caption.to_string(),
+        TextStyle {
+            font: font,
+            font_size: 33.0,
+            color: Color::rgb(0.9, 0.9, 0.9),
+        },
+    );
+
+    let button = ButtonBundle {
+        style: button_style,
+        border_color: BorderColor(Color::BLACK),
+        // border_radius: BorderRadius::MAX,                    
+        background_color: NORMAL_BUTTON.into(),        
+        ..default()
+    };
+
+    let button = QButtonBundle{
+        button: button,
+        id: Id::new(id.to_string())
+    };
+
+
+    parent.spawn(button).with_children(|parent|{
+        parent.spawn(button_text);
+    });    
+}
+
+fn build_buttons(commands: &mut Commands,font: Handle<Font>){    
+    commands.spawn(NodeBundle {
+        style: Style {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::Center,                
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(5.),
+            ..default()
+        },
+        ..default()
+    })
+    .with_children(|parent| {
+        create_button(parent,"host_button", "Host",font.clone());
+        create_button(parent,"guest_button", "Guest",font.clone());
+    });    
+}
+
 fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
-    let wooden_stack_texture = asset_server.load("wooden_stack.png");    
-    let white_stack_texture = asset_server.load("white_stack.png");        
-    let wooden_nut_texture = asset_server.load("wooden_nut.png");    
-    let white_nut_texture = asset_server.load("white_nut.png");    
+    let wooden_stack_texture: Handle<Image> = asset_server.load("wooden_stack.png");    
+    let white_stack_texture: Handle<Image> = asset_server.load("white_stack.png");        
+    let wooden_nut_texture: Handle<Image> = asset_server.load("wooden_nut.png");    
+    let white_nut_texture: Handle<Image> = asset_server.load("white_nut.png");    
+    let lato_regular_font: Handle<Font> = asset_server.load("fonts/Lato/Lato-Regular.ttf");    
 
     let mut camera = Camera2dBundle::default();
     camera.projection.scaling_mode = ScalingMode::FixedVertical(720.);
@@ -199,4 +225,104 @@ fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
 
     draw_points(commands.borrow_mut(), wooden_stack_texture, white_stack_texture);
     draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);    
+    build_buttons(commands.borrow_mut(),lato_regular_font);
+}
+
+fn update(
+    mut interaction_query: Query<
+        (
+            &Id,
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >    
+) {    
+    for (id,interaction, mut color, mut border_color, children) in &mut interaction_query {
+        
+        match (*interaction){
+            Interaction::Pressed =>println!("{} pressed!",id.id),
+            _ => ()
+        }
+    }
+    // for (interaction, mut color, mut border_color, children) in &mut interaction_query {
+    //     let mut text = text_query.get_mut(children[0]).unwrap();
+    //     match *interaction {
+    //         Interaction::Pressed => {
+    //             text.sections[0].value = "Press".to_string();
+    //             // *color = PRESSED_BUTTON.into();
+    //             // border_color.0 = RED.into();
+    //         }
+    //         Interaction::Hovered => {
+    //             text.sections[0].value = "Hover".to_string();
+    //             // *color = HOVERED_BUTTON.into();
+    //             // border_color.0 = Color::WHITE;
+    //         }
+    //         Interaction::None => {
+    //             text.sections[0].value = "Button".to_string();
+    //             // *color = NORMAL_BUTTON.into();
+    //             // border_color.0 = Color::BLACK;
+    //         }
+    //     }
+    // }
+}
+
+
+#[derive(Bundle)]
+struct QButtonBundle {
+    // You can nest bundles inside of other bundles like this
+    // Allowing you to compose their functionality
+    button: ButtonBundle,
+    id: Id
+}
+
+#[derive(Component)]
+struct Id{
+    pub id: String,
+}
+
+impl  Id {
+    fn new(value: String)->Id{
+        return Id { id: value }
+    }
+}
+
+
+#[tokio::main]
+async fn main() {    
+    let gdk = GDK::new();
+    gdk.start_game().await;
+
+    App::new()
+    .add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Aptos Backgammon".into(),
+            // name: Some("backgammon.app".into()),
+            // mode: WindowMode::BorderlessFullscreen,
+            resolution: (1280., 720.).into(),
+            present_mode: PresentMode::AutoVsync,
+            // Tells Wasm to resize the window according to the available canvas
+            fit_canvas_to_parent: true,
+            // Tells Wasm not to override default event handling, like F5, Ctrl+R etc.
+            prevent_default_event_handling: false,
+            window_theme: Some(WindowTheme::Dark),
+            enabled_buttons: bevy::window::EnabledButtons {
+                maximize: false,
+                ..Default::default()
+            },
+            // This will spawn an invisible window
+            // The window will be made visible in the make_visible() system after 3 frames.
+            // This is useful when you want to avoid the white window that shows up before the GPU is ready to render the app.
+            visible: true,
+            ..default()
+        }),
+        ..default()
+    }),)
+    .add_systems(Startup, setup)
+    .add_systems(Update, update)
+    .run();    
+
+    
 }
