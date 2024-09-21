@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.89"
 aptos-sdk = { git = "https://github.com/aptos-labs/aptos-core", branch = "devnet" }
-bevy = "=0.12.1"
+bevy = { version = "=0.12.1", features = ["dynamic_linking"] }
 ed25519-dalek-bip32 = "0.3.0"
 once_cell = "1.19.0"
     rand = "0.7.3"
@@ -17,3 +17,11 @@ url = "2.5.2"
 [patch.crates-io]
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 x25519-dalek = { git = "https://github.com/aptos-labs/x25519-dalek", branch = "zeroize_v1" }
+
+# Enable a small amount of optimization in the dev profile.
+[profile.dev]
+opt-level = 1
+
+# Enable a large amount of optimization in the dev profile for dependencies.
+[profile.dev.package."*"]
+opt-level = 3
