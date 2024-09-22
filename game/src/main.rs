@@ -15,9 +15,7 @@ use utils::{global_to_player_tower_index, player_to_global_tower_index, Board, P
 
 const BAR_WIDTH : f32 = 100.;
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
-const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
+const MENU_BACKGROUND_COLOR: Color = Color::rgb(0.15, 0.15, 0.15);
 
 fn draw_points(commands:&mut Commands,wooden_stack_texture: Handle<Image>,white_stack_texture: Handle<Image>){
     //Render top    
@@ -150,69 +148,84 @@ fn draw_nuts(commands: &mut Commands,wooden_nut_texture: Handle<Image>,white_nut
         
 }
 
-fn create_button(parent:&mut ChildBuilder,id: &str,caption: &str,font: Handle<Font>){        
+fn create_button(parent:&mut ChildBuilder,id: &str,caption: &str,assets: ButtonAssets){        
     let button_style = Style {
         width: Val::Px(150.0),
         height: Val::Px(65.0),
-        border: UiRect::all(Val::Px(5.0)),
+        // border: UiRect::all(Val::Px(5.0)),
         // horizontally center child text
         justify_content: JustifyContent::Center,
         // vertically center child text
         align_items: AlignItems::Center,
         ..default()
     };
+    
 
-    let button_text = TextBundle::from_section(
-        caption.to_string(),
-        TextStyle {
-            font: font,
-            font_size: 33.0,
-            color: Color::rgb(0.9, 0.9, 0.9),
-        },
-    );
-
-    let button = ButtonBundle {
+    let button: ButtonBundle = ButtonBundle {
         style: button_style,
-        border_color: BorderColor(Color::BLACK),
+        // border_color: BorderColor(Color::BLACK),
         // border_radius: BorderRadius::MAX,                    
-        background_color: NORMAL_BUTTON.into(),        
+        // background_color: NORMAL_BUTTON.into(),     
+        image: UiImage::new(assets.normal.clone()) ,   
         ..default()
     };
 
     let button = QButtonBundle{
+        id: Id::new(id.to_string()),
         button: button,
-        id: Id::new(id.to_string())
+        assets: assets        
     };
 
-
-    parent.spawn(button).with_children(|parent|{
-        parent.spawn(button_text);
-    });    
+    parent.spawn(button);
+    // parent.spawn(button).with_children(|parent|{
+    //     parent.spawn(button_text);
+    // });    
 }
 
-fn build_buttons(commands: &mut Commands,font: Handle<Font>){    
+fn build_buttons(commands: &mut Commands,host_button_assets: ButtonAssets,join_button_assets: ButtonAssets){    
     commands.spawn(NodeBundle {
         style: Style {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
-            align_items: AlignItems::Center,                
-            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,                            
+            justify_content: JustifyContent::Center,            
             column_gap: Val::Px(5.),
             ..default()
         },
+        background_color: MENU_BACKGROUND_COLOR,
         ..default()
     })
     .with_children(|parent| {
-        create_button(parent,"host_button", "Host",font.clone());
-        create_button(parent,"guest_button", "Guest",font.clone());
+        create_button(parent,"host_button", "Host",host_button_assets);
+        create_button(parent,"guest_button", "Guest",join_button_assets);
     });    
 }
 
+#[derive(Component)]
+struct ButtonAssets{
+    normal: Handle<Image>,
+    hover: Handle<Image>,
+    pressed: Handle<Image>
+}
+
 fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
-    let wooden_stack_texture: Handle<Image> = asset_server.load("wooden_stack.png");    
-    let white_stack_texture: Handle<Image> = asset_server.load("white_stack.png");        
-    let wooden_nut_texture: Handle<Image> = asset_server.load("wooden_nut.png");    
-    let white_nut_texture: Handle<Image> = asset_server.load("white_nut.png");    
+    
+    let wooden_stack_texture: Handle<Image> = asset_server.load("sprites/game/wooden_stack.png");    
+    let white_stack_texture: Handle<Image> = asset_server.load("sprites/game/white_stack.png");        
+    let wooden_nut_texture: Handle<Image> = asset_server.load("sprites/game/wooden_nut.png");    
+    let white_nut_texture: Handle<Image> = asset_server.load("sprites/game/white_nut.png");        
+
+    let host_button_assets = ButtonAssets{
+        normal: asset_server.load("sprites/ui/host_button/normal.png"),
+        hover: asset_server.load("sprites/ui/host_button/hover.png"),
+        pressed: asset_server.load("sprites/ui/host_button/pressed.png")
+    };
+    let join_button_assets = ButtonAssets{
+        normal: asset_server.load("sprites/ui/join_button/normal.png"),
+        hover: asset_server.load("sprites/ui/join_button/hover.png"),
+        pressed: asset_server.load("sprites/ui/join_button/pressed.png")
+    };
+    
     let lato_regular_font: Handle<Font> = asset_server.load("fonts/Lato/Lato-Regular.ttf");    
 
     let mut camera = Camera2dBundle::default();
@@ -221,11 +234,11 @@ fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
 
     commands.spawn(camera);
 
-    let board = initialize();    
+    let board = initialize();        
 
     draw_points(commands.borrow_mut(), wooden_stack_texture, white_stack_texture);
     draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);    
-    build_buttons(commands.borrow_mut(),lato_regular_font);
+    build_buttons(commands.borrow_mut(),host_button_assets,join_button_assets);
 }
 
 fn update(
@@ -233,49 +246,42 @@ fn update(
         (
             &Id,
             &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-            &Children,
+            &ButtonAssets,
+            &mut UiImage,
+            // &mut BackgroundColor,
+            // &mut BorderColor,
+            // &Children,
         ),
         (Changed<Interaction>, With<Button>),
     >    
-) {    
-    for (id,interaction, mut color, mut border_color, children) in &mut interaction_query {
+) {  
+    
+    for (id,interaction,assets,mut image/* , mut color, mut border_color, children*/) in &mut interaction_query {
         
         match (*interaction){
-            Interaction::Pressed =>println!("{} pressed!",id.id),
+            Interaction::None => {
+                image.texture = assets.normal.clone();
+                println!("{}","normal");
+            },
+            Interaction::Hovered=> {
+                image.texture = assets.hover.clone();
+                println!("{}","hover");
+            },
+            Interaction::Pressed =>{
+                image.texture = assets.pressed.clone();
+                println!("{}","pressed");
+            },
             _ => ()
         }
-    }
-    // for (interaction, mut color, mut border_color, children) in &mut interaction_query {
-    //     let mut text = text_query.get_mut(children[0]).unwrap();
-    //     match *interaction {
-    //         Interaction::Pressed => {
-    //             text.sections[0].value = "Press".to_string();
-    //             // *color = PRESSED_BUTTON.into();
-    //             // border_color.0 = RED.into();
-    //         }
-    //         Interaction::Hovered => {
-    //             text.sections[0].value = "Hover".to_string();
-    //             // *color = HOVERED_BUTTON.into();
-    //             // border_color.0 = Color::WHITE;
-    //         }
-    //         Interaction::None => {
-    //             text.sections[0].value = "Button".to_string();
-    //             // *color = NORMAL_BUTTON.into();
-    //             // border_color.0 = Color::BLACK;
-    //         }
-    //     }
-    // }
+    }    
 }
 
 
 #[derive(Bundle)]
-struct QButtonBundle {
-    // You can nest bundles inside of other bundles like this
-    // Allowing you to compose their functionality
+struct QButtonBundle {   
+    id: Id,
     button: ButtonBundle,
-    id: Id
+    assets: ButtonAssets
 }
 
 #[derive(Component)]
