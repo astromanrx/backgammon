@@ -3,6 +3,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use bevy::{prelude::*, render::camera::ScalingMode, sprite::Anchor, window::{PresentMode, WindowMode, WindowTheme}};
+use bevy_simple_text_input::{TextInput, TextInputPlugin, TextInputSubmitEvent};
 
 #[path = "./utils.rs"]
 mod utils;
@@ -182,7 +183,32 @@ fn create_button(parent:&mut ChildBuilder,id: &str,caption: &str,assets: ButtonA
     // });    
 }
 
-fn build_buttons(commands: &mut Commands,host_button_assets: ButtonAssets,join_button_assets: ButtonAssets){    
+fn create_text_input(parent:&mut ChildBuilder,font: Handle<Font>){
+    parent.spawn((
+        NodeBundle {
+            style: Style {
+                width: Val::Px(200.0),
+                border: UiRect::all(Val::Px(5.0)),
+                padding: UiRect::all(Val::Px(5.0)),
+                ..default()
+            },
+            border_color: BorderColor(Color::BLACK),
+            background_color: Color::RED.into(),
+            ..default()
+        },
+        TextInput {
+            text_style: TextStyle {
+                font: font,
+                font_size: 40.,
+                color: Color::rgb(0.9, 0.9, 0.9),
+                ..default()
+            },
+            ..default()
+        },
+    ));
+}
+
+fn build_buttons(commands: &mut Commands,host_button_assets: ButtonAssets,join_button_assets: ButtonAssets,font: Handle<Font>){    
     commands.spawn(NodeBundle {
         style: Style {
             width: Val::Percent(100.0),
@@ -192,12 +218,13 @@ fn build_buttons(commands: &mut Commands,host_button_assets: ButtonAssets,join_b
             column_gap: Val::Px(5.),
             ..default()
         },
-        background_color: MENU_BACKGROUND_COLOR,
+        background_color: BackgroundColor::from(MENU_BACKGROUND_COLOR),
         ..default()
     })
     .with_children(|parent| {
         create_button(parent,"host_button", "Host",host_button_assets);
         create_button(parent,"guest_button", "Guest",join_button_assets);
+        create_text_input(parent,font);
     });    
 }
 
@@ -238,7 +265,7 @@ fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
 
     draw_points(commands.borrow_mut(), wooden_stack_texture, white_stack_texture);
     draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);    
-    build_buttons(commands.borrow_mut(),host_button_assets,join_button_assets);
+    build_buttons(commands.borrow_mut(),host_button_assets,join_button_assets,lato_regular_font);
 }
 
 fn update(
@@ -295,6 +322,11 @@ impl  Id {
     }
 }
 
+fn input_listener(mut events: EventReader<TextInputSubmitEvent>) {
+    for event in events.read() {
+        info!("{:?} submitted: {}", event.entity, event.value);
+    }
+}
 
 #[tokio::main]
 async fn main() {    
@@ -326,8 +358,10 @@ async fn main() {
         }),
         ..default()
     }),)
+    .add_plugins(TextInputPlugin)
     .add_systems(Startup, setup)
     .add_systems(Update, update)
+    .add_systems(Update, input_listener)
     .run();    
 
     

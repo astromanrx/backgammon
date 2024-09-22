@@ -2381,6 +2381,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_simple_text_input"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ceeeee4876eb735100420481baafc28341d95db4363977c776f8867b96b5bcdb"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_sprite"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4427,6 +4436,7 @@ dependencies = [
  "anyhow",
  "aptos-sdk",
  "bevy",
+ "bevy_simple_text_input",
  "ed25519-dalek-bip32 0.3.0",
  "once_cell",
  "rand 0.7.3",
