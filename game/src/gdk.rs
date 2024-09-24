@@ -40,6 +40,14 @@ static FAUCET_URL: Lazy<Url> = Lazy::new(|| {
     .unwrap()
 });
 
+enum State{
+    None,    
+    Creating,
+    Created,
+    Joining,
+    Started,
+}
+
 pub struct GDK{
     rest_client: Client,
     faucet_client: FaucetClient,
@@ -47,6 +55,7 @@ pub struct GDK{
     player_account: LocalAccount,
     transaction_factory: TransactionFactory,
     module_id: ModuleId,
+    state: State
 }
 
 impl GDK {
@@ -71,7 +80,8 @@ impl GDK {
             // coin_client,
             player_account,
             transaction_factory,
-            module_id
+            module_id,
+            state: State::None
         };
 
 
@@ -106,7 +116,13 @@ impl GDK {
             .context("Failed to fund player's account");
     }
 
-    pub async fn start_game(&self){        
+    pub fn get_address(&self)->String {
+        return self.player_account.address().to_standard_string();
+    }
+
+    pub async fn start_game(&mut self){      
+        self.state = State::Creating;
+  
         println!("{}",self.player_account.address());
         // let chain_id = self.rest_client.get_index()
         //     .await
@@ -144,7 +160,9 @@ impl GDK {
         match result {
             Err(error) => println!("{}",error),
             Ok(response) => println!("{}","Game started.")
-        }
+        };
+
+        self.state = State::Created;
     }
 
     async fn roll_the_dice(&self){
@@ -165,7 +183,8 @@ impl GDK {
         }
     }
 
-    async fn join_game(&self){
+    async fn join_game(&mut self){
+        self.state = State::Joining;
         let function_id:Identifier = ident_str!("join_game").to_owned();
         let type_tags: Vec<TypeTag> = vec![];
         let args : Vec<Vec<u8>> = vec![];
@@ -180,7 +199,8 @@ impl GDK {
             Ok(response) => {
                 println!("{}","Joined game.");
             }
-        }        
+        };
+        self.state = State::Started;
     }
     
 }

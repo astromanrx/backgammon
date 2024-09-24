@@ -1,15 +1,11 @@
 // https://www.bkgm.com/rules.html
+mod utils;
+mod gdk;
 
-use std::borrow::{Borrow, BorrowMut};
+use std::{any::Any, borrow::{Borrow, BorrowMut}};
 
 use bevy::{prelude::*, render::camera::ScalingMode, sprite::Anchor, window::{PresentMode, WindowMode, WindowTheme}};
 use bevy_simple_text_input::{TextInput, TextInputPlugin, TextInputSubmitEvent};
-
-#[path = "./utils.rs"]
-mod utils;
-
-#[path = "./gdk.rs"]
-mod gdk;
 
 use gdk::GDK;
 use utils::{global_to_player_tower_index, player_to_global_tower_index, Board, PLAYER_GUEST, PLAYER_HOST, TOWERS_COUNT,initialize};
@@ -149,7 +145,7 @@ fn draw_nuts(commands: &mut Commands,wooden_nut_texture: Handle<Image>,white_nut
         
 }
 
-fn create_button(parent:&mut ChildBuilder,id: &str,caption: &str,assets: ButtonAssets){        
+fn create_button(parent:&mut ChildBuilder,id: &str,assets: ButtonAssets){        
     let button_style = Style {
         width: Val::Px(150.0),
         height: Val::Px(65.0),
@@ -222,20 +218,20 @@ fn build_buttons(commands: &mut Commands,host_button_assets: ButtonAssets,join_b
         ..default()
     })
     .with_children(|parent| {
-        create_button(parent,"host_button", "Host",host_button_assets);
-        create_button(parent,"guest_button", "Guest",join_button_assets);
+        create_button(parent,"host_button", host_button_assets);
+        create_button(parent,"join_button",join_button_assets);
         create_text_input(parent,font);
     });    
 }
 
-#[derive(Component)]
+#[derive(Component,Clone)]
 struct ButtonAssets{
     normal: Handle<Image>,
     hover: Handle<Image>,
     pressed: Handle<Image>
 }
 
-fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
+fn load_assets(mut commands: Commands,asset_server: Res<AssetServer>,mut game: ResMut<Game>){
     
     let wooden_stack_texture: Handle<Image> = asset_server.load("sprites/game/wooden_stack.png");    
     let white_stack_texture: Handle<Image> = asset_server.load("sprites/game/white_stack.png");        
@@ -263,12 +259,28 @@ fn setup(mut commands: Commands,asset_server: Res<AssetServer>){
 
     let board = initialize();        
 
-    draw_points(commands.borrow_mut(), wooden_stack_texture, white_stack_texture);
-    draw_nuts(commands.borrow_mut(), wooden_nut_texture, white_nut_texture,&board);    
-    build_buttons(commands.borrow_mut(),host_button_assets,join_button_assets,lato_regular_font);
+    game.board =Some(board);
+    game.host_button_assets = Some(host_button_assets);
+    game.join_button_assets = Some(join_button_assets);
+    game.lato_regular_font = lato_regular_font;
+    game.wooden_stack_texture = wooden_stack_texture;
+    game.wooden_nut_texture = wooden_nut_texture;
+    game.white_stack_texture = white_stack_texture;
+    game.white_nut_texture = white_nut_texture;
 }
 
-fn update(
+fn setup_game(mut commands: Commands,mut game: ResMut<Game>){
+    draw_points(commands.borrow_mut(), game.wooden_stack_texture.clone(), game.white_stack_texture.clone());
+
+    let board = game.board.as_ref().unwrap();
+    draw_nuts(commands.borrow_mut(), game.wooden_nut_texture.clone(), game.white_nut_texture.clone(),board);    
+}
+
+fn setup_menu(mut commands: Commands,mut game: ResMut<Game>){
+    build_buttons(commands.borrow_mut(),game.host_button_assets.clone().unwrap(),game.join_button_assets.clone().unwrap(),game.lato_regular_font.clone());
+}
+
+fn update_mainmenu(
     mut interaction_query: Query<
         (
             &Id,
@@ -280,7 +292,8 @@ fn update(
             // &Children,
         ),
         (Changed<Interaction>, With<Button>),
-    >    
+    >,
+    mut next_state: ResMut<NextState<GameState>>,    
 ) {  
     
     for (id,interaction,assets,mut image/* , mut color, mut border_color, children*/) in &mut interaction_query {
@@ -295,6 +308,12 @@ fn update(
                 println!("{}","hover");
             },
             Interaction::Pressed =>{
+                if id.id == "host_button"{
+                    next_state.set(GameState::InGame);
+                }
+                if id.id == "join_button"{
+                    next_state.set(GameState::InGame);
+                }
                 image.texture = assets.pressed.clone();
                 println!("{}","pressed");
             },
@@ -328,13 +347,56 @@ fn input_listener(mut events: EventReader<TextInputSubmitEvent>) {
     }
 }
 
+
+fn create_game(mut backend: ResMut<Backend>){
+    let future = backend.gdk.start_game();    
+}
+
+
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Default, States)]
+enum GameState{    
+    #[default]
+    MainMenu,
+    CreatingGame,
+    JoiningGame,    
+    InGame
+}
+
+// remove all entities that are not a camera or window
+fn tear_down(mut commands: Commands, entities: Query<Entity, (Without<Camera>, Without<Window>)>) {
+    for entity in &entities {
+        commands.entity(entity).despawn();     
+    }
+}
+
+#[derive(Resource, Default)]
+struct Game{    
+    board:Option<Board>,
+    wooden_stack_texture: Handle<Image>,
+    white_stack_texture: Handle<Image>,
+    wooden_nut_texture: Handle<Image>,
+    white_nut_texture: Handle<Image>,
+    host_button_assets :Option<ButtonAssets>,
+    join_button_assets: Option<ButtonAssets>,    
+    lato_regular_font: Handle<Font>
+}
+
+#[derive(Resource)]
+struct Backend{
+    gdk: GDK
+}
+
+
 #[tokio::main]
 async fn main() {    
-    let gdk = GDK::new();
-    gdk.start_game().await;
+    let gdk = GDK::new();        
+    let wallet_address = gdk.get_address();
+    // gdk.start_game().await;
+    
 
-    App::new()
-    .add_plugins(DefaultPlugins.set(WindowPlugin {
+    let mut app = App::new();
+
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "Aptos Backgammon".into(),
             // name: Some("backgammon.app".into()),
@@ -357,12 +419,24 @@ async fn main() {
             ..default()
         }),
         ..default()
-    }),)
+    }),)    
+    .init_resource::<Game>()
+    .insert_resource(Backend{
+        gdk: gdk
+    })
+    .add_state::<GameState>()    
     .add_plugins(TextInputPlugin)
-    .add_systems(Startup, setup)
-    .add_systems(Update, update)
-    .add_systems(Update, input_listener)
-    .run();    
+    .add_systems(Startup, load_assets)
+    .add_systems(OnEnter(GameState::InGame), setup_game.after(load_assets))
+    .add_systems(OnEnter(GameState::MainMenu), setup_menu.after(load_assets))
+    .add_systems(Update, update_mainmenu.run_if(in_state(GameState::MainMenu)))
+    .add_systems(Update, input_listener.run_if(in_state(GameState::MainMenu)))
+    .add_systems(OnExit(GameState::InGame),tear_down)
+    .add_systems(OnExit(GameState::MainMenu),tear_down)
+    ;
+    // app.add_state<State>();     
 
+    // app.configure_sets(Update, input_listener.run_if(in_state(State::InGame)) );    
+    app.run();   
     
 }
