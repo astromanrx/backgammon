@@ -130,21 +130,21 @@ pub fn update_mainmenu(
         match (*interaction){
             Interaction::None => {
                 image.texture = assets.normal.clone();
-                println!("{}","normal");
             },
             Interaction::Hovered=> {
                 image.texture = assets.hover.clone();
-                println!("{}","hover");
             },
             Interaction::Pressed =>{
                 if id.id == "host_button"{
-                    next_state.set(GameState::InGame);
+                    next_state.set(GameState::CreatingGame);
+                    println!("Host button pressed");
                 }
                 if id.id == "join_button"{
-                    next_state.set(GameState::InGame);
+                    next_state.set(GameState::JoiningGame);
+                    println!("Join button pressed");
                 }
                 image.texture = assets.pressed.clone();
-                println!("{}","pressed");
+                
             },
             _ => ()
         }

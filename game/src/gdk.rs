@@ -25,7 +25,7 @@ static NODE_URL: Lazy<Url> = Lazy::new(|| {
         std::env::var("APTOS_NODE_URL")
             .as_ref()
             .map(|s| s.as_str())
-            .unwrap_or("https://api.devnet.aptoslabs.com"),
+            .unwrap_or("http://127.0.0.1:8080/"),
     )
     .unwrap()
 });
@@ -35,7 +35,7 @@ static FAUCET_URL: Lazy<Url> = Lazy::new(|| {
         std::env::var("APTOS_FAUCET_URL")
             .as_ref()
             .map(|s| s.as_str())
-            .unwrap_or("https://faucet.devnet.aptoslabs.com"),
+            .unwrap_or("http://127.0.0.1:8081/"),
     )
     .unwrap()
 });
@@ -55,7 +55,8 @@ pub struct GDK{
     player_account: LocalAccount,
     transaction_factory: TransactionFactory,
     module_id: ModuleId,
-    state: State
+    pub state: State,
+    pub game_address: Option<AccountAddress>,
 }
 
 impl GDK {
@@ -63,7 +64,7 @@ impl GDK {
         let rest_client = Client::new(NODE_URL.clone());
         let faucet_client = FaucetClient::new(FAUCET_URL.clone(), NODE_URL.clone());        
         let coin_client = CoinClient::new(&rest_client);
-        
+                
         // let mut alice = LocalAccount::generate(&mut OsRng);
         // let bob = LocalAccount::generate(&mut OsRng);
         let player_account = LocalAccount::generate(&mut OsRng);
@@ -80,6 +81,7 @@ impl GDK {
             // coin_client,
             player_account,
             transaction_factory,
+            game_address: None,
             module_id,
             state: State::None
         };
@@ -105,7 +107,6 @@ impl GDK {
         //         .await
         //         .context("Failed to get Bob's account balance the second time")?
         // );    
-        // RawTransaction::new(sender, sequence_number, payload, max_gas_amount, gas_unit_price, expiration_timestamp_secs, chain_id)
     
     }
 
@@ -120,10 +121,18 @@ impl GDK {
         return self.player_account.address().to_standard_string();
     }
 
-    pub async fn start_game(&mut self){      
+    pub async fn get_latest_transaction_version(&self){
+        let info = self.rest_client.get_ledger_information().await;
+        info.unwrap().into_inner().version;        
+    }
+
+    pub async fn create_game(&mut self){      
         self.state = State::Creating;
-  
+          
         println!("{}",self.player_account.address());
+
+        
+
         // let chain_id = self.rest_client.get_index()
         //     .await
         //     .context("Failed to get chain ID")?
@@ -154,8 +163,11 @@ impl GDK {
         //     Err(error) => println!("Failed in simulation {}",error),
         //     _ => println!("{}","Simulation succeeded.")
         // }
-        let result = self.rest_client.submit_and_wait(&signed_transaction)
+        
+        let result: std::result::Result<aptos_sdk::rest_client::Response<Transaction>, aptos_sdk::rest_client::error::RestError> = self.rest_client.submit_and_wait(&signed_transaction)
             .await;        
+
+        self.game_address = Some(self.player_account.address());
                 
         match result {
             Err(error) => println!("{}",error),
@@ -178,16 +190,19 @@ impl GDK {
         match result {
             Err(error) => println!("{}",error),
             Ok(response) => {
-                println!("{}","Dice rolled.");
+                println!("{}","Dice rolled.");                
             }
         }
     }
 
-    async fn join_game(&mut self){
+    pub async fn join_game(&mut self,game_addr_encoded: String ){
+        let game_addr = AccountAddress::from_hex_literal(&game_addr_encoded.as_str()).unwrap();
         self.state = State::Joining;
         let function_id:Identifier = ident_str!("join_game").to_owned();
-        let type_tags: Vec<TypeTag> = vec![];
-        let args : Vec<Vec<u8>> = vec![];
+        let type_tags: Vec<TypeTag> = vec![TypeTag::Address];
+        let args : Vec<Vec<u8>> = vec![
+            bcs::to_bytes(&game_addr).unwrap()
+        ];
         let entry_function = EntryFunction::new(self.module_id.clone(),function_id,type_tags,args);
         let builder = self.transaction_factory.entry_function(entry_function);
         let raw_transaction = builder.build();
@@ -200,6 +215,7 @@ impl GDK {
                 println!("{}","Joined game.");
             }
         };
+        self.game_address = Some(game_addr);
         self.state = State::Started;
     }
     
